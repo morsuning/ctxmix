@@ -20,20 +20,22 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest, ubuntu-24.04-arm]
         go: ["1.21", "stable"]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: ${{ matrix.go }}
+          cache: false
       - name: Test
         run: go test -short -count=1 -timeout 25m ./...
 
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: stable
+          cache: false
       - name: gofmt
         run: test -z "$(gofmt -l .)"
       - name: vet
@@ -55,10 +57,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: stable
+          cache: false
       - run: GOARCH=386 go test -short -count=1 -timeout 25m ./...
 
   bigendian:
@@ -66,25 +69,29 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: stable
-      - name: Install QEMU user-mode emulation
-        run: sudo apt-get update && sudo apt-get install -y qemu-user-static
+          cache: false
+      - name: Register QEMU user-mode emulation (binfmt_misc)
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: s390x
       - name: Format and golden-vector tests
         run: |
-          GOARCH=s390x go test -short -count=1 -timeout 50m -exec qemu-s390x-static \
+          GOARCH=s390x go test -short -count=1 -timeout 50m \
             -run 'Golden|Specification|EncodeDecodeBlock|BlockBoundaries|Example' .
 
   race:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: stable
+          cache: false
       - name: Race detector (concurrency-related tests)
         run: go test -race -short -count=1 -timeout 25m -run 'Concurrency|Reader|Writer|Context|Close|Chunk|MaxOutput' .
 
@@ -93,10 +100,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: stable
+          cache: false
       - run: go test -count=1 -timeout 30m ./...
       - run: go test -run '^$' -fuzz 'FuzzDecode$' -fuzztime 30s -fuzzminimizetime 1s .
       - run: go test -run '^$' -fuzz FuzzDecodeBlock -fuzztime 30s -fuzzminimizetime 1s .

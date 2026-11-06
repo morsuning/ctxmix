@@ -1,0 +1,103 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test (${{ matrix.os }}, go ${{ matrix.go }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest, ubuntu-24.04-arm]
+        go: ["1.21", "stable"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+      - name: Test
+        run: go test -short -count=1 -timeout 25m ./...
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - name: gofmt
+        run: test -z "$(gofmt -l .)"
+      - name: vet
+        run: go vet ./...
+      - name: go.mod is tidy and has no dependencies
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod
+          test ! -e go.sum
+      - name: Cross-compile
+        run: |
+          for t in linux/amd64 linux/arm64 linux/386 linux/arm linux/riscv64 linux/ppc64le linux/s390x \
+                   darwin/amd64 darwin/arm64 windows/amd64 windows/386 windows/arm64 freebsd/amd64; do
+            echo "== $t"; GOOS=${t%/*} GOARCH=${t#*/} go build ./... || exit 1
+          done
+
+  portability:
+    name: 32-bit (GOARCH=386)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - run: GOARCH=386 go test -short -count=1 -timeout 25m ./...
+
+  bigendian:
+    name: big-endian (s390x under QEMU)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - name: Install QEMU user-mode emulation
+        run: sudo apt-get update && sudo apt-get install -y qemu-user-static
+      - name: Format and golden-vector tests
+        run: |
+          GOARCH=s390x go test -short -count=1 -timeout 50m -exec qemu-s390x-static \
+            -run 'Golden|Specification|EncodeDecodeBlock|BlockBoundaries|Example' .
+
+  race:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - name: Race detector (concurrency-related tests)
+        run: go test -race -short -count=1 -timeout 25m -run 'Concurrency|Reader|Writer|Context|Close|Chunk|MaxOutput' .
+
+  full:
+    name: full test + fuzz smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - run: go test -count=1 -timeout 30m ./...
+      - run: go test -run '^$' -fuzz 'FuzzDecode$' -fuzztime 30s -fuzzminimizetime 1s .
+      - run: go test -run '^$' -fuzz FuzzDecodeBlock -fuzztime 30s -fuzzminimizetime 1s .
+      - run: go test -run '^$' -fuzz FuzzRoundtrip -fuzztime 30s -fuzzminimizetime 1s .

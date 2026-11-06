@@ -1,0 +1,7 @@
+# Test and build artifacts
+*.test
+*.out
+*.prof
+/ctxmix
+/dist/
+# Fuzzing: only reproducers of fixed bugs are kept (in testdata/fuzz)
